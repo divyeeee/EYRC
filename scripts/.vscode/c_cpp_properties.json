@@ -1,0 +1,33 @@
+{
+  "configurations": [
+    {
+      "browse": {
+        "databaseFilename": "${default}",
+        "limitSymbolsToIncludedHeaders": false
+      },
+      "includePath": [
+        "/home/anuj/ros2_ws/install/velodyne_gazebo_plugins/include/**",
+        "/home/anuj/ros2_ws/install/my_robot_interfaces/include/**",
+        "/home/anuj/turtlebot3_ws/install/turtlebot3_fake_node/include/**",
+        "/home/anuj/turtlebot3_ws/install/turtlebot3_msgs/include/**",
+        "/home/anuj/turtlebot3_ws/install/turtlebot3_gazebo/include/**",
+        "/home/anuj/turtlebot3_ws/install/dynamixel_sdk_custom_interfaces/include/**",
+        "/home/anuj/turtlebot3_ws/install/dynamixel_sdk/include/**",
+        "/home/anuj/colcon_ws/install/servo_msgs/include/**",
+        "/home/anuj/colcon_ws/install/realsense_gazebo_plugin/include/**",
+        "/home/anuj/colcon_ws/install/payload_service/include/**",
+        "/home/anuj/colcon_ws/install/linkattacher_msgs/include/**",
+        "/home/anuj/colcon_ws/install/ebot_docking/include/**",
+        "/opt/ros/humble/include/**",
+        "/home/anuj/colcon_ws/src/realsense_gazebo_plugin/include/**",
+        "/usr/include/**"
+      ],
+      "name": "ROS",
+      "intelliSenseMode": "gcc-x64",
+      "compilerPath": "/usr/bin/gcc",
+      "cStandard": "gnu11",
+      "cppStandard": "c++14"
+    }
+  ],
+  "version": 4
+}
