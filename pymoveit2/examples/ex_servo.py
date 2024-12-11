@@ -1,69 +1,61 @@
+#!/usr/bin/env python3
+"""
+Example of using MoveIt 2 Servo to perform a circular motion.
+`ros2 run pymoveit2 ex_servo.py`
+"""
+
+
+from math import cos, sin
+import math, time
+from copy import deepcopy
 import rclpy
+import tf2_ros
+from rclpy.callback_groups import ReentrantCallbackGroup
 from rclpy.node import Node
-from std_srvs.srv import Trigger
 from geometry_msgs.msg import TwistStamped
+from pymoveit2.robots import ur5
+from rclpy.qos import (
+    QoSDurabilityPolicy,
+    QoSHistoryPolicy,
+    QoSProfile,
+    QoSReliabilityPolicy,
+)
 
-class ServoTwistPublisher(Node):
-    def __init__(self):
-        super().__init__('servo_twist_publisher') 
-        
-        # Create a client for the /servo_node/start_servo service
-        self.start_servo_client = self.create_client(Trigger, '/servo_node/start_servo')
-        
-        # Wait for the service to be available
-        while not self.start_servo_client.wait_for_service(timeout_sec=1.0):
-            self.get_logger().info('Waiting for /servo_node/start_servo service...')
-        
-        # Create the service request
-        start_servo_request = Trigger.Request()
-        
-        # Call the service to start the servo
-        self.future = self.start_servo_client.call_async(start_servo_request)
-        rclpy.spin_until_future_complete(self, self.future)
-        
-        if self.future.result() is not None:
-            self.get_logger().info('Servo started successfully!')
-        else:
-            self.get_logger().error('Failed to start servo.')
-            return
-        
-        # Create a publisher for the /servo_node/delta_twist_cmds topic
-        self.twist_pub = self.create_publisher(TwistStamped, '/servo_node/delta_twist_cmds', 10)
-        
-        # Set the publishing rate to 125 Hz
-        self.timer = self.create_timer(1/125, self.publish_twist)
+# Initialize message based on passed arguments
+
+__twist_msg = TwistStamped()
+__twist_msg.header.frame_id = ur5.base_link_name()
+__twist_msg.twist.linear.x = linear_speed
+__twist_msg.twist.linear.y = linear_speed
+__twist_msg.twist.linear.z = linear_speed
+__twist_msg.twist.angular.x = angular_speed
+__twist_msg.twist.angular.y = angular_speed
+__twist_msg.twist.angular.z = angular_speed
+
+def main():
+    rclpy.init()
+
+    # Create node for this example
+    node = Node("ex_servo")
+
+    # Create callback group that allows execution of callbacks in parallel without restrictions
+    callback_group = ReentrantCallbackGroup()
+    __twist_pub = node.create_publisher(TwistStamped, "/servo_node/delta_twist_cmds", 10)
     
-    def publish_twist(self):
-        # Create a TwistStamped message
-        twist_msg = TwistStamped()
-        twist_msg.header.stamp = self.get_clock().now().to_msg()
-        
-        # Set the linear velocity (z = 0.2 m/s)
-        twist_msg.twist.linear.x = 0.0
-        twist_msg.twist.linear.y = 0.2
-        twist_msg.twist.linear.z = 0.2
-        
-        # Set the angular velocity (all 0.0)
-        twist_msg.twist.angular.x = 0.2
-        twist_msg.twist.angular.y = 0.0
-        twist_msg.twist.angular.z = 0.0
-        
-        # Publish the twist message
-        self.twist_pub.publish(twist_msg)
-        self.get_logger().info('Published twist command.')
+    def servo_circular_motion():
+        """Move in a circular motion using Servo"""
 
-def main(args=None):
-    rclpy.init(args=args)
-    
-    try:
-        # Create the node and spin
-        node = ServoTwistPublisher()
-        rclpy.spin(node)
-    except KeyboardInterrupt:
-        pass
-    finally:
-        node.destroy_node()
-        rclpy.shutdown()
+    # Create timer for moving in a circular motion
+    node.create_timer(0.02, servo_circular_motion)
 
-if __name__ == '__main__':
+    # Spin the node in background thread(s)
+    executor = rclpy.executors.MultiThreadedExecutor(2)
+    executor.add_node(node)
+    executor.spin()
+
+    rclpy.shutdown()
+    exit(0)
+
+
+if __name__ == "__main__":
     main()
