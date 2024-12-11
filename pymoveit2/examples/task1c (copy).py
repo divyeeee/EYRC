@@ -12,7 +12,6 @@ class UR5moveit(Node):
     def __init__(self):
         super().__init__('ur5_control')
 
-        # Create MoveIt2 interface for UR5 robot
         self.moveit2 = MoveIt2(
             node=self,
             joint_names=ur5.joint_names(),
@@ -21,10 +20,10 @@ class UR5moveit(Node):
             group_name=ur5.MOVE_GROUP_ARM,
         )
 
-        # Reentrant Callback Group for service clients
+
         self.callback_group = ReentrantCallbackGroup()
 
-        # Service clients for attaching and detaching the box
+
         self.attach_client = self.create_client(
             AttachLink, '/GripperMagnetON', callback_group=self.callback_group
         )
@@ -32,7 +31,7 @@ class UR5moveit(Node):
             DetachLink, '/GripperMagnetOFF', callback_group=self.callback_group
         )
 
-        # Wait for services to be available
+
         while not self.attach_client.wait_for_service(timeout_sec=1.0):
             self.get_logger().info('Waiting for Gripper Attach service...')
         while not self.detach_client.wait_for_service(timeout_sec=1.0):
@@ -42,7 +41,7 @@ class UR5moveit(Node):
         """Move UR5 to a specified joint configuration."""
         self.get_logger().info(f'Moving to joint positions: {joint_positions}')
         self.moveit2.move_to_configuration(joint_positions)
-        time.sleep(6)  # Replace with actual feedback from MoveIt if possible
+        time.sleep(3.2)  # Replace with actual feedback from MoveIt if possible
 
     def attach_box(self, box_name):
         """Attach the box to the gripper using GripperMagnetON service."""
@@ -81,14 +80,13 @@ class UR5moveit(Node):
 def main():
     rclpy.init()
     ur5_control = UR5moveit()
-    executor = MultiThreadedExecutor()
-    executor.add_node(ur5_control)
-    thread = Thread(target=executor.spin, daemon=True)
-    thread.start()
+    
     P1 = [-1.3439, -1.50098, 1.37881, -3.00197, -1.78024, 3.1765]  # Position 1
     P2 = [-0.436332, -0.463786, 1.13446, -2.22402, -1.5708, 2.70526]  # Position 2
     P3 = [0.366519, -0.335066, 0.855211, -2.07694, -1.55334, 3.50811]  # Position 3
-    drop = [0.0, -3.33358, 1.23918, -1.06465, 1.6461, 3.14159]  # Pre-drop position
+    drop = [0.0,-2.28638, -0.785398, -3.21141 , -1.50098, 3.14159]  # Pre-drop position
+    drop1 = [0.0174533, -2.33874, -0.506145, -3.4383, -1.50098, 3.14159]
+    d3 = [0.0, -1.78024, -1.72788, -2.77507, -1.55334 ,3.14159]
     box_name = 'box1'  # Box model name from ArUco TF
     ur5_control.get_logger().info("Moving to P1")
     ur5_control.move_to_joint_goal(P1)
@@ -101,18 +99,18 @@ def main():
     ur5_control.move_to_joint_goal(P2)
     ur5_control.attach_box(box_name)
     ur5_control.get_logger().info("Moving to drop position")
-    ur5_control.move_to_joint_goal(drop)
+    ur5_control.move_to_joint_goal(drop1)
     ur5_control.detach_box(box_name)
     box_name = 'box3'
     ur5_control.get_logger().info("Moving to P3")
     ur5_control.move_to_joint_goal(P3)
     ur5_control.attach_box(box_name)
     ur5_control.get_logger().info("Moving to drop position")
-    ur5_control.move_to_joint_goal(drop)
+    ur5_control.move_to_joint_goal(d3)
     ur5_control.detach_box(box_name)
     ur5_control.destroy_node()
     rclpy.shutdown()
-    thread.join()
+    
 
 if __name__ == '__main__':
     main()

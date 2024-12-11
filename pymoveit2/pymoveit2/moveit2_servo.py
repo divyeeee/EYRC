@@ -15,10 +15,6 @@ from std_srvs.srv import Trigger
 
 
 class MoveIt2Servo:
-    """
-    Python interface for MoveIt 2 Servo that enables real-time control in Cartesian Space.
-    This implementation is just a thin wrapper around TwistStamped message publisher.
-    """
 
     def __init__(
         self,
