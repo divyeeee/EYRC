@@ -1,0 +1,36 @@
+{
+    "python.autoComplete.extraPaths": [
+        "/home/divyev/EYRC_ws/build/ur5_control",
+        "/home/divyev/EYRC_ws/install/ur5_control/lib/python3.10/site-packages",
+        "/home/divyev/EYRC_ws/install/servo_msgs/local/lib/python3.10/dist-packages",
+        "/home/divyev/EYRC_ws/install/pymoveit2/local/lib/python3.10/dist-packages",
+        "/home/divyev/EYRC_ws/install/payload_service/local/lib/python3.10/dist-packages",
+        "/home/divyev/EYRC_ws/install/linkattacher_msgs/local/lib/python3.10/dist-packages",
+        "/home/divyev/EYRC_ws/install/ebot_docking/local/lib/python3.10/dist-packages",
+        "/home/divyev/colcon_ws/install/ur5_control/lib/python3.10/site-packages",
+        "/home/divyev/colcon_ws/install/servo_msgs/local/lib/python3.10/dist-packages",
+        "/home/divyev/colcon_ws/install/pymoveit2/local/lib/python3.10/dist-packages",
+        "/home/divyev/colcon_ws/install/payload_service/local/lib/python3.10/dist-packages",
+        "/home/divyev/colcon_ws/install/linkattacher_msgs/local/lib/python3.10/dist-packages",
+        "/home/divyev/colcon_ws/install/ebot_docking/local/lib/python3.10/dist-packages",
+        "/opt/ros/humble/lib/python3.10/site-packages",
+        "/opt/ros/humble/local/lib/python3.10/dist-packages"
+    ],
+    "python.analysis.extraPaths": [
+        "/home/divyev/EYRC_ws/build/ur5_control",
+        "/home/divyev/EYRC_ws/install/ur5_control/lib/python3.10/site-packages",
+        "/home/divyev/EYRC_ws/install/servo_msgs/local/lib/python3.10/dist-packages",
+        "/home/divyev/EYRC_ws/install/pymoveit2/local/lib/python3.10/dist-packages",
+        "/home/divyev/EYRC_ws/install/payload_service/local/lib/python3.10/dist-packages",
+        "/home/divyev/EYRC_ws/install/linkattacher_msgs/local/lib/python3.10/dist-packages",
+        "/home/divyev/EYRC_ws/install/ebot_docking/local/lib/python3.10/dist-packages",
+        "/home/divyev/colcon_ws/install/ur5_control/lib/python3.10/site-packages",
+        "/home/divyev/colcon_ws/install/servo_msgs/local/lib/python3.10/dist-packages",
+        "/home/divyev/colcon_ws/install/pymoveit2/local/lib/python3.10/dist-packages",
+        "/home/divyev/colcon_ws/install/payload_service/local/lib/python3.10/dist-packages",
+        "/home/divyev/colcon_ws/install/linkattacher_msgs/local/lib/python3.10/dist-packages",
+        "/home/divyev/colcon_ws/install/ebot_docking/local/lib/python3.10/dist-packages",
+        "/opt/ros/humble/lib/python3.10/site-packages",
+        "/opt/ros/humble/local/lib/python3.10/dist-packages"
+    ]
+}

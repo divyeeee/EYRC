@@ -1,0 +1,31 @@
+{
+  "configurations": [
+    {
+      "browse": {
+        "databaseFilename": "${default}",
+        "limitSymbolsToIncludedHeaders": false
+      },
+      "includePath": [
+        "/home/divyev/EYRC_ws/install/servo_msgs/include/**",
+        "/home/divyev/EYRC_ws/install/realsense_gazebo_plugin/include/**",
+        "/home/divyev/EYRC_ws/install/payload_service/include/**",
+        "/home/divyev/EYRC_ws/install/linkattacher_msgs/include/**",
+        "/home/divyev/EYRC_ws/install/ebot_docking/include/**",
+        "/home/divyev/colcon_ws/install/servo_msgs/include/**",
+        "/home/divyev/colcon_ws/install/realsense_gazebo_plugin/include/**",
+        "/home/divyev/colcon_ws/install/payload_service/include/**",
+        "/home/divyev/colcon_ws/install/linkattacher_msgs/include/**",
+        "/home/divyev/colcon_ws/install/ebot_docking/include/**",
+        "/opt/ros/humble/include/**",
+        "/home/divyev/EYRC_ws/src/realsense_gazebo_plugin/include/**",
+        "/usr/include/**"
+      ],
+      "name": "ROS",
+      "intelliSenseMode": "gcc-x64",
+      "compilerPath": "/usr/bin/gcc",
+      "cStandard": "gnu11",
+      "cppStandard": "c++14"
+    }
+  ],
+  "version": 4
+}
