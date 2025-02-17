@@ -57,7 +57,7 @@ class JointJogService(Node):
         ---
         joint_jog_service = JointJogService()
         '''
-        super().__init__('joint_jog_service')
+        super().__init__('joint_jog_service_3')
 
         # Callback groups to separate execution
         self.service_callback_group = MutuallyExclusiveCallbackGroup()
@@ -80,7 +80,7 @@ class JointJogService(Node):
         # Service to trigger the action
         self.service = self.create_service(
             Trigger, 
-            'execute_joint_jog', 
+            'execute_third_joint_jog', 
             self.execute_callback, 
             callback_group=self.service_callback_group
         )
@@ -95,24 +95,6 @@ class JointJogService(Node):
         self.start_servo()
 
     def start_servo(self):
-        '''
-        Purpose:
-        ---
-        Starts the servo operation by calling the `/servo_node/start_servo` service asynchronously.
-        It repeatedly checks for the availability of the service before making the call.
-
-        Input Arguments:
-        ---
-        None
-
-        Returns:
-        ---
-        None
-
-        Example call:
-        ---
-        self.start_servo()
-        '''
         while not self.start_servo_client.wait_for_service(timeout_sec=1.0):
             self.get_logger().info('Waiting for /servo_node/start_servo service...')
 
@@ -121,25 +103,6 @@ class JointJogService(Node):
         future.add_done_callback(self.start_servo_callback)
 
     def start_servo_callback(self, future):
-        '''
-        Purpose:
-        ---
-        Callback function to handle the response of the `/servo_node/start_servo` service call.
-        It logs whether the servo was started successfully or if it encountered an error.
-
-        Input Arguments:
-        ---
-        `future` : [ Future ]
-            Future object containing the result of the asynchronous service call.
-
-        Returns:
-        ---
-        None
-
-        Example call:
-        ---
-        future.add_done_callback(self.start_servo_callback)
-        '''
         try:
             response = future.result()
             if response.success:
@@ -150,49 +113,9 @@ class JointJogService(Node):
             self.get_logger().error(f'Service call failed: {e}')
 
     def joint_state_callback(self, msg):
-        '''
-        Purpose:
-        ---
-        Callback function to update the current joint positions of the robot.
-        This function is triggered whenever a new joint state message is received.
-
-        Input Arguments:
-        ---
-        `msg` : [ sensor_msgs.msg.JointState ]
-            Message containing the current joint state, including positions, velocities, and efforts.
-
-        Returns:
-        ---
-        None
-
-        Example call:
-        ---
-        self.joint_state_callback(msg)
-        '''
         self.current_joint_positions = msg.position
 
     def attach_gripper(self, model1_name):
-        '''
-        Purpose:
-        ---
-        Attaches an object (e.g., a box) to the UR5 gripper using the AttachLink service.
-        The function waits for the service to become available, creates a request to attach 
-        the specified object, and calls the service asynchronously.
-
-        Input Arguments:
-        ---
-        `model1_name` : [ str ]
-            The name of the object (model) to be attached to the UR5 gripper.
-
-        Returns:
-        ---
-        None
-
-        Example call:
-        ---
-        self.attach_gripper('box_1')
-        '''
-        
         # Create client for the AttachLink service to attach the object
         gripper_control = self.create_client(AttachLink, '/GripperMagnetON')
 
@@ -214,26 +137,6 @@ class JointJogService(Node):
         self.get_logger().info(f"Attached {model1_name} to UR5 gripper.")
 
     def detach_gripper(self, model1_name):
-        '''
-        Purpose:
-        ---
-        Detaches an object (e.g., a box) from the UR5 gripper using the DetachLink service.
-        The function waits for the service to become available, creates a request to detach 
-        the specified object, and calls the service asynchronously.
-
-        Input Arguments:
-        ---
-        `model1_name` : [ str ]
-            The name of the object (model) to be detached from the UR5 gripper.
-
-        Returns:
-        ---
-        None
-
-        Example call:
-        ---
-        self.detach_gripper('box_1')
-        '''
         # Create client for the DetachLink service to detach the object
         gripper_control = self.create_client(DetachLink, '/GripperMagnetOFF')
 
@@ -255,30 +158,7 @@ class JointJogService(Node):
         self.get_logger().info(f"Detached {model1_name} from UR5 gripper.")
 
     def execute_callback(self, request, response):
-        '''
-        Purpose:
-        ---
-        Callback function to handle a service request for a joint jog operation.
-        It starts the joint jog operation in a separate thread and provides an immediate response.
-
-        Input Arguments:
-        ---
-        `request` : [ ServiceRequest ]
-            The incoming request for the joint jog operation (typically contains jog parameters).
-        
-        `response` : [ ServiceResponse ]
-            The response object that will be populated and returned to the client.
-
-        Returns:
-        ---
-        `response` : [ ServiceResponse ]
-            A response indicating whether the joint jog operation started successfully.
-
-        Example call:
-        ---
-        response = self.execute_callback(request, response)
-        '''
-        self.get_logger().info('Executing joint jog operation.')
+        self.get_logger().info('Executing joint jog operation 3.')
 
         # Create a thread for the service task
         task_thread = threading.Thread(target=self.perform_joint_jog_task)
@@ -290,44 +170,23 @@ class JointJogService(Node):
         return response
 
     def perform_joint_jog_task(self):
-        '''
-        Purpose:
-        ---
-        Performs a sequence of movements to manipulate a robotic arm, including:
-        1. Moving to the desired joint angles.
-        2. Moving the wrist to specific target poses.
-        3. Attaching the gripper to an object.
-        4. Moving to a drop location and detaching the gripper.
-
-        Input Arguments:
-        ---
-        None
-
-        Returns:
-        ---
-        None
-
-        Example call:
-        ---
-        self.perform_joint_jog_task()
-        '''
         try:
-            # Step 1: Move to the desired joint angles
-            self.go_to_state(self.desired_joint_angles_deg)
-
-            # Step 2: Move the wrist to the first target pose
+            # Step 1: Move the wrist to top position
+            target_pose2 = [0.163, 0.093, 0.535]
+            self.move_wrist_to_pose2(target_pose2)
+            
             target_pose1 = [0.178, 0.0500, 0.417]
             self.move_wrist_to_pose(target_pose1)
 
             # Step 3: Move the wrist to the second target pose
-            target_pose2 = [-0.006590, -0.424872, 0.229360]
+            target_pose2 = [0.046590, -0.424872, 0.229360]
             self.move_wrist_to_pose2(target_pose2)
 
             # Step 4: Attach the gripper to the object
-            transform = self.tf_buffer.lookup_transform('base_link', 'obj_1', rclpy.time.Time())
+            transform = self.tf_buffer.lookup_transform('base_link', 'obj_3', rclpy.time.Time())
             target_pose = [transform.transform.translation.x, transform.transform.translation.y, transform.transform.translation.z]
             self.move_wrist_to_pose(target_pose)
-            self.attach_gripper('box1')
+            self.attach_gripper('box3')
 
             # Step 5: Move the wrist to the drop location and detach the gripper
             target_pose2 = [0.163, 0.093, 0.535]
@@ -341,28 +200,6 @@ class JointJogService(Node):
             self.get_logger().error(f'Error during Manupulation Task: {e}')
 
     def get_wrist_pose(self):
-        '''
-        Purpose:
-        ---
-        Retrieves the current position and orientation of the wrist (end effector) 
-        by looking up the transform between 'base_link' and 'wrist_3_link'.
-
-        Input Arguments:
-        ---
-        None
-
-        Returns:
-        ---
-        position : [ geometry_msgs.msg.Point ]
-            The position of the wrist (x, y, z coordinates).
-        
-        rotation : [ geometry_msgs.msg.Quaternion ]
-            The orientation of the wrist (quaternion: x, y, z, w).
-
-        Example call:
-        ---
-        position, rotation = self.get_wrist_pose()
-        '''
         try:
             transform = self.tf_buffer.lookup_transform('base_link', 'wrist_3_link', rclpy.time.Time())
             position = transform.transform.translation
@@ -375,26 +212,6 @@ class JointJogService(Node):
             return None, None
 
     def move_wrist_to_pose(self, target_pose):
-        '''
-        Purpose:
-        ---
-        Moves the wrist (end effector) to a specified target pose using proportional control 
-        based on the position error in each of the x, y, and z axes. The wrist moves until 
-        the error is within the defined tolerance.
-
-        Input Arguments:
-        ---
-        `target_pose` : [ list ]
-            A list of [x, y, z] coordinates representing the target position to move the wrist to.
-
-        Returns:
-        ---
-        None
-
-        Example call:
-        ---
-        self.move_wrist_to_pose([0.1, 0.2, 0.3])
-        '''
         kp_linear = 45 # Linear proportional gain
         tolerance = 0.09  # Tolerance in meters
 
@@ -427,26 +244,6 @@ class JointJogService(Node):
             rclpy.spin_once(self, timeout_sec=0.1)
 
     def move_wrist_to_pose2(self, target_pose2):
-        '''
-        Purpose:
-        ---
-        Moves the wrist (end effector) to a specified target pose using proportional control 
-        based on the position error in each of the x, y, and z axes. The wrist moves until 
-        the error is within the defined tolerance.
-
-        Input Arguments:
-        ---
-        `target_pose2` : [ list ]
-            A list of [x, y, z] coordinates representing the target position to move the wrist to.
-
-        Returns:
-        ---
-        None
-
-        Example call:
-        ---
-        self.move_wrist_to_pose2([0.1, 0.2, 0.3])
-        '''
         kp_linear = 45# Linear proportional gain
         tolerance = 0.08  # Tolerance in meters
 
@@ -479,27 +276,6 @@ class JointJogService(Node):
             rclpy.spin_once(self, timeout_sec=0.1)
 
     def go_to_state(self, target_joint_angles_deg):
-        '''
-        Purpose:
-        ---
-        Moves the robot's joints to the target joint angles using proportional control. 
-        The function sends velocity commands to each joint until the robot reaches the target joint positions 
-        within a specified tolerance.
-
-        Input Arguments:
-        ---
-        `target_joint_angles_deg` : [ list ]
-            A list of target joint angles in degrees for each of the robot's joints.
-
-        Returns:
-        ---
-        None
-
-        Example call:
-        ---
-        self.go_to_state([45, 30, 90, 0, 45])
-        '''
-        
         target_joint_angles_rad = [np.deg2rad(angle) for angle in target_joint_angles_deg]
         tolerance_deg = 10
 
@@ -535,27 +311,6 @@ class JointJogService(Node):
             rclpy.spin_once(self, timeout_sec=0.1)
 
     def is_within_tolerance(self, target_joint_angles_rad, tolerance_deg):
-        '''
-        Purpose:
-        ---
-        Checks whether the current joint positions are within the specified tolerance from the target joint angles.
-
-        Input Arguments:
-        ---
-        `target_joint_angles_rad` : [ list ]
-            A list of target joint angles in radians.
-        
-        `tolerance_deg` : [ float ]
-            The tolerance in degrees within which the joint positions are considered "reached".
-        
-        Returns:
-        ---
-        bool : True if all joint angles are within the tolerance, False otherwise.
-        
-        Example call:
-        ---
-        self.is_within_tolerance([0.5, 1.0, -0.5], 5)
-        '''
         for target, current in zip(target_joint_angles_rad, self.current_joint_positions):
             error = (target - current + np.pi) % (2 * np.pi) - np.pi
             error_deg = np.rad2deg(error)
@@ -565,26 +320,6 @@ class JointJogService(Node):
 
 
 def main(args=None):
-
-    '''
-    Purpose:
-    ---
-    Initializes the ROS 2 node and executes it in a MultiThreadedExecutor.
-    This allows for concurrent handling of multiple tasks (e.g., callback processing).
-
-    Input Arguments:
-    ---
-    `args` : [ list, optional ]
-        Arguments to pass to the ROS 2 node initialization, default is `None`.
-
-    Returns:
-    ---
-    None
-
-    Example call:
-    ---
-    main()
-    '''
     rclpy.init(args=args)
 
     # Use a MultiThreadedExecutor to handle multiple threads

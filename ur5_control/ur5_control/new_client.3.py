@@ -15,7 +15,7 @@ from rclpy.node import Node
 from geometry_msgs.msg import PoseStamped, Quaternion
 from nav2_simple_commander.robot_navigator import BasicNavigator
 from tf_transformations import quaternion_from_euler
-from payload_service.srv import PayloadSW
+from payload_service.srv import PayloadSW, PickNplaceSW
 from ebot_docking.srv import DockSw
 from std_srvs.srv import SetBool
 import time
@@ -53,7 +53,7 @@ class PayloadAndNavigation(Node):
         # Create Service Clients
         # -----------------------------
         # Service clients
-        self.payload_client = self.create_client(SetBool, 'picknplace')
+        self.payload_client = self.create_client(PickNplaceSW, 'picknplace')
         self.dock_client = self.create_client(DockSw, '/dock_control')
         self.payload_ka_client = self.create_client(PayloadSW, '/payload_sw')
 
@@ -121,13 +121,14 @@ class PayloadAndNavigation(Node):
     ---
     <request_payload_service_chirayu()>
     '''
-    def request_payload_service_chirayu(self, data=True):
+    def request_payload_service_chirayu(self,boxname,data=True):
         #Handling of service-client interaction
         while not self.payload_client.wait_for_service(timeout_sec=1.0):
             self.get_logger().info('Waiting for payload service to be available...')
         #<request> : <A Setbool Request type request consisting of Bool value Data>
-        request = SetBool.Request()
+        request = PickNplaceSW.Request()
         request.data = data
+        request.box_name = boxname
         # request.drop = drop
         #Creation of Future for asynchronous communication
         future = self.payload_client.call_async(request)
@@ -158,7 +159,7 @@ class PayloadAndNavigation(Node):
     <request_payload(receive=True,drop=False)>
     '''
 
-    def request_payload(self, receive=False, drop=True):
+    def request_payload(self,boxname, receive=False, drop=True):
         print("hi")
         #Handling of Client-service interaction and logging 
         while not self.payload_ka_client.wait_for_service(timeout_sec=1.0):
@@ -167,6 +168,7 @@ class PayloadAndNavigation(Node):
         reqi = PayloadSW.Request()
         reqi.receive = receive
         reqi.drop = drop 
+        reqi.box_name = boxname
         #Printing for Error Handling     
         print(reqi)
         #Creation of future for Asynchronous communication
@@ -247,27 +249,65 @@ def main(args=None):
 
     try:
         # Move to the first location
-        driver.get_logger().info("Moving to the first location...")
-        driver.go_to_pose(0.5, -2.40, 3.07)
-        driver.request_docker(orient_value=3.10,rack=1)
-        time.sleep(1.5)
+    #     driver.get_logger().info("Moving to the first location...")
+    #     driver.go_to_pose(0.85, -2.40, 3.14)
+    #     driver.request_docker(orient_value=3.10,rack=1)
+    #     time.sleep(1.5)
 
         # Call the payload service
         driver.get_logger().info("Calling the payload service...")
-        driver.request_payload_service_chirayu()
+        driver.request_payload_service_chirayu(boxname="1")
 
-        # Move to the second location
-        driver.get_logger().info("Moving to the second location...")
-        driver.go_to_pose(2.32, 2.55, -1.70)
-        driver.request_docker(orient_value=-1.70,rack=1)
-        #Using sleep for smoother communication
-        time.sleep(5)
-        driver.request_payload()
-        time.sleep(5)
-    #Exception and error Handling 
-    except Exception as e:
-        driver.get_logger().error(f"An error occurred: {e}")
-    #Shutting down of lifecycle and destroying node to stop further communication
+    #     # Move to the second location
+    #     driver.get_logger().info("Moving to the second location...")
+    #     driver.go_to_pose(2.32, 2.55, -1.70)
+    #     driver.request_docker(orient_value=-1.70,rack=1)
+    #     #Using sleep for smoother communication
+    #     time.sleep(5)
+    #     driver.request_payload(boxname="Box1")
+    #     time.sleep(5)
+
+    #     # Move to the third location
+    #     driver.get_logger().info("Moving to the first location...")
+    #     driver.go_to_pose(1.13, -2.40, 3.14)
+    #     driver.request_docker(orient_value=3.10,rack=1)
+    #     time.sleep(1.5)
+
+    #     # Call the payload service
+    #     driver.get_logger().info("Calling the payload service...")
+    #     driver.request_payload_service_chirayu(boxname="2")
+
+    #     # Move to the fourth location
+    #     driver.get_logger().info("Moving to the second location...")
+    #     driver.go_to_pose(-4.4,  2.89, -1.57)
+    #     driver.request_docker(orient_value=-1.70,rack=1)
+    #     #Using sleep for smoother communication
+    #     time.sleep(5)
+    #     driver.request_payload("Box2")
+    #     time.sleep(5)
+
+    #     # Move to the fifth location
+    #     driver.get_logger().info("Moving to the first location...")
+    #     driver.go_to_pose(1.13, -2.40, 3.14)
+    #     driver.request_docker(orient_value=3.10,rack=1)
+    #     time.sleep(1.5)
+
+    #     # Call the payload service
+    #     driver.get_logger().info("Calling the payload service...")
+    #     driver.request_payload_service_chirayu(boxname="3")
+
+    #     # Move to the sixth location
+    #     driver.get_logger().info("Moving to the second location...")
+    #     driver.go_to_pose(2.32, 2.55, -1.70)
+    #     driver.request_docker(orient_value=-1.70,rack=1)
+    #     #Using sleep for smoother communication
+    #     time.sleep(5)
+    #     driver.request_payload("Box3")
+    #     time.sleep(5)
+    # #Exception and error Handling 
+    # except Exception as e:
+    #     driver.get_logger().error(f"An error occurred: {e}")
+    # #Shutting down of lifecycle and destroying node to stop further communication
     finally:
         driver.nav.lifecycleShutdown()
         driver.destroy_node()

@@ -15,7 +15,7 @@ from rclpy.node import Node
 from geometry_msgs.msg import PoseStamped, Quaternion
 from nav2_simple_commander.robot_navigator import BasicNavigator
 from tf_transformations import quaternion_from_euler
-from payload_service.srv import PayloadSW
+from payload_service.srv import PayloadSW, PicknPlace
 from ebot_docking.srv import DockSw
 from std_srvs.srv import SetBool
 import time
@@ -53,7 +53,7 @@ class PayloadAndNavigation(Node):
         # Create Service Clients
         # -----------------------------
         # Service clients
-        self.payload_client = self.create_client(SetBool, 'picknplace')
+        self.payload_client = self.create_client(PicknPlace, 'picknplace')
         self.dock_client = self.create_client(DockSw, '/dock_control')
         self.payload_ka_client = self.create_client(PayloadSW, '/payload_sw')
 
@@ -126,7 +126,7 @@ class PayloadAndNavigation(Node):
         while not self.payload_client.wait_for_service(timeout_sec=1.0):
             self.get_logger().info('Waiting for payload service to be available...')
         #<request> : <A Setbool Request type request consisting of Bool value Data>
-        request = SetBool.Request()
+        request = PicknPlace.Request()
         request.data = data
         # request.drop = drop
         #Creation of Future for asynchronous communication
@@ -167,16 +167,20 @@ class PayloadAndNavigation(Node):
         reqi = PayloadSW.Request()
         reqi.receive = receive
         reqi.drop = drop 
-        reqi.box_name=box_name
+        reqi.box_name = box_name
         #Printing for Error Handling     
         print(reqi)
         #Creation of future for Asynchronous communication
         future = self.payload_ka_client.call_async(reqi)
+        print(future)
+        print(future.result())
         # Running Node and blocking execution further until future produces result accordingly
         rclpy.spin_until_future_complete(self, future)
+        print("hi3")
         # Handling of result and logging of information to terminal , depending on success and failure 
         if future.result():
             response = future.result()
+            print(response.message)
             if response.success:
                 self.get_logger().info(f'Payload service call succeeded: {response.message}')
             else:
@@ -237,6 +241,39 @@ class PayloadAndNavigation(Node):
         else:
             self.get_logger().error('Failed to call docking service.')
 
+    def wait_for_service(self):
+        self.get_logger().info('Waiting for service...')
+        if not self.payload_client.wait_for_service(timeout_sec=5.0):
+            self.get_logger().error('Service not available')
+            return False
+        return True
+
+    def send_request(self, box_name):
+        if not self.wait_for_service():
+            return False
+
+        request = PicknPlace.Request()
+        request.data = True
+        request.box_name = box_name
+        
+        self.get_logger().info(f'Processing {box_name}...')
+        
+        try:
+            future = self.payload_client.call_async(request)
+            rclpy.spin_until_future_complete(self, future)
+            
+            if future.result() is not None:
+                response = future.result()
+                self.get_logger().info(f'Finished {box_name}: {response.message}')
+                return True
+            else:
+                self.get_logger().error(f'Service call failed for {box_name}')
+                return False
+                
+        except Exception as e:
+            self.get_logger().error(f'Service call failed for {box_name}: {str(e)}')
+            return False
+
 def main(args=None):
     #Initialistion of Node
     rclpy.init(args=args)
@@ -255,16 +292,27 @@ def main(args=None):
 
         # Call the payload service
         driver.get_logger().info("Calling the payload service...")
-        driver.request_payload_service_chirayu()
-
+        # driver.request_payload_service_chirayu()
+        success = driver.send_request('box1')
+            
+        if success:
+            driver.get_logger().info(f'Completed box1, waiting 20 seconds...')
+        else:
+            driver.get_logger().error(f'Failed box1, waiting 20 seconds...')
+            
+            # Wait between boxes
+            # time.sleep(20)
+        time.sleep(17)
         # Move to the second location
         driver.get_logger().info("Moving to the second location...")
         driver.go_to_pose(2.32, 2.55, -1.70)
         driver.request_docker(orient_value=-1.70,rack=1)
         #Using sleep for smoother communication
-        time.sleep(10)
-        driver.request_payload(box_name='box1')
-        time.sleep(10)
+        time.sleep(5)
+        driver.request_payload(box_name="box1")
+        time.sleep(15)
+        driver.request_docker(undock=True)
+        time.sleep(5)
     #Exception and error Handling 
     except Exception as e:
         driver.get_logger().error(f"An error occurred: {e}")

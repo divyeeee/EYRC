@@ -1,15 +1,4 @@
 #!/usr/bin/env python3
-'''
-# Team ID:          1118
-# Theme:            Logistic coBot
-# Author List:      Saeesh , Sambhav, Anshul , Robin
-# Filename:         joint_jog_service.py
-# Functions:        start_servo, start_servo_callback, joint_state_callback, 
-#                   attach_gripper, detach_gripper, execute_callback, 
-#                   perform_joint_jog_task, get_wrist_pose, move_wrist_to_pose, 
-#                   move_wrist_to_pose2, go_to_state, is_within_tolerance, main
-# Global variables: None
-'''
 
 import rclpy
 from rclpy.node import Node
@@ -57,7 +46,7 @@ class JointJogService(Node):
         ---
         joint_jog_service = JointJogService()
         '''
-        super().__init__('joint_jog_service')
+        super().__init__('joint_jog_service_2')
 
         # Callback groups to separate execution
         self.service_callback_group = MutuallyExclusiveCallbackGroup()
@@ -80,7 +69,7 @@ class JointJogService(Node):
         # Service to trigger the action
         self.service = self.create_service(
             Trigger, 
-            'execute_joint_jog', 
+            'execute_second_joint_jog', 
             self.execute_callback, 
             callback_group=self.service_callback_group
         )
@@ -192,7 +181,6 @@ class JointJogService(Node):
         ---
         self.attach_gripper('box_1')
         '''
-        
         # Create client for the AttachLink service to attach the object
         gripper_control = self.create_client(AttachLink, '/GripperMagnetON')
 
@@ -312,22 +300,19 @@ class JointJogService(Node):
         self.perform_joint_jog_task()
         '''
         try:
-            # Step 1: Move to the desired joint angles
-            self.go_to_state(self.desired_joint_angles_deg)
+            # Step 1: Move the wrist to top position
+            target_pose2 = [0.163, 0.093, 0.535]
+            self.move_wrist_to_pose2(target_pose2)
 
-            # Step 2: Move the wrist to the first target pose
-            target_pose1 = [0.178, 0.0500, 0.417]
-            self.move_wrist_to_pose(target_pose1)
-
-            # Step 3: Move the wrist to the second target pose
-            target_pose2 = [-0.006590, -0.424872, 0.229360]
+            # Step 2: Move the wrist to the second target pose
+            target_pose2 = [0.1064,0.2466,0.2462]
             self.move_wrist_to_pose2(target_pose2)
 
             # Step 4: Attach the gripper to the object
-            transform = self.tf_buffer.lookup_transform('base_link', 'obj_1', rclpy.time.Time())
+            transform = self.tf_buffer.lookup_transform('base_link', 'obj_2', rclpy.time.Time())
             target_pose = [transform.transform.translation.x, transform.transform.translation.y, transform.transform.translation.z]
             self.move_wrist_to_pose(target_pose)
-            self.attach_gripper('box1')
+            self.attach_gripper('box2')
 
             # Step 5: Move the wrist to the drop location and detach the gripper
             target_pose2 = [0.163, 0.093, 0.535]
@@ -499,7 +484,6 @@ class JointJogService(Node):
         ---
         self.go_to_state([45, 30, 90, 0, 45])
         '''
-        
         target_joint_angles_rad = [np.deg2rad(angle) for angle in target_joint_angles_deg]
         tolerance_deg = 10
 
@@ -565,7 +549,6 @@ class JointJogService(Node):
 
 
 def main(args=None):
-
     '''
     Purpose:
     ---

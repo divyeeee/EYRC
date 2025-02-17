@@ -1,13 +1,10 @@
 '''
-# Team ID:          1114
+# Team ID:          1118
 # Theme:            Logistic coBot
-# Author List:      Anuj, Yashita, Chirayu, Divye
-# Filename:         new_service.5.py
-# Functions:        _configure_parameters, _initialize_state, 
-#                   _setup_services, _setup_communication,_emergency_halt, 
-#                   _process_odometry, _process_left_proximity, 
-#                   _process_left_proximity, _evaluate_proximity,  
-#                   _handle_docking_request, _execute_control_loop, main
+# Author List:      Saeesh , Sambhav, Anshul , Robin
+# Filename:         ebot_docking.py
+# Functions:        force_stop odometry_callback, ultrasonic_rl_callback, ultrasonic_rr_callback ,
+#                   check_distance, dock_control_callback, controller_loop, main
 # Global variables: None
 '''
 import rclpy
@@ -18,15 +15,16 @@ from sensor_msgs.msg import Range
 from rclpy.callback_groups import ReentrantCallbackGroup
 from rclpy.executors import MultiThreadedExecutor
 from tf_transformations import euler_from_quaternion
-from ebot_docking.srv import DockSw
+from ebot_docking.srv import DockSw 
 import math
 
-class AutonomousDockingSystem(Node):
+class MyRobotDockingController(Node):
+
     def __init__(self):
         '''
         Purpose:
         ---
-        Initializes the AutonomousDockingSystem node, sets up ROS 2 publishers, 
+        Initializes the MyRobotDockingController node, sets up ROS 2 publishers, 
         subscribers, service servers, and control timers. Defines initial parameters 
         for robot docking behavior and motion control.
 
@@ -37,43 +35,104 @@ class AutonomousDockingSystem(Node):
         Returns:
         ---
         None
-
-        Example call:
-        ---
-        node = AutonomousDockingSystem()
-
         '''
-        super().__init__('autonomous_docking_system')
+        super().__init__('my_robot_docking_controller')
         
-        # -----------------------------
-        # Configuration parameters
-        # -----------------------------
-        self._configure_parameters()
-        
-        # -----------------------------
-        # Initialize state variables
-        # -----------------------------
-        self._initialize_state()
-        
-        # -----------------------------
-        # Set up ROS2 communication
-        # -----------------------------
-        self._setup_communication()
-        
-        # -----------------------------
-        # Initialize control loop
-        # -----------------------------
-        #Adding timer to give functionality of callback in timer after certain defined interval
-        self._motion_control = self.create_timer(0.1, self._execute_control_loop)
-        self.get_logger().info('Autonomous Docking System Initialized')
+        # Log initialization message
+        self.get_logger().info('Initializing MyRobotDocking Controller...')
 
-    def _configure_parameters(self):
-    
+        # Callback group for managing concurrency in service callbacks
+        self.callback_group = ReentrantCallbackGroup()
+
+        # -----------------------------
+        # Subscribers: Receive sensor and odometry data
+        # -----------------------------
+        # Subscription to Odometry data for robot position and orientation
+        self.odom_sub = self.create_subscription(
+            Odometry, 'odom', self.odometry_callback, 10)
+        
+        # Subscription to Left Ultrasonic Sensor data
+        self.ultrasonic_rl_sub = self.create_subscription(
+            Range, '/ultrasonic_rl/scan', self.ultrasonic_rl_callback, 10)
+        
+        # Subscription to Right Ultrasonic Sensor data
+        self.ultrasonic_rr_sub = self.create_subscription(
+            Range, '/ultrasonic_rr/scan', self.ultrasonic_rr_callback, 10)
+        
+        self.get_logger().info('All subscribers started')
+
+        # -----------------------------
+        # Publishers: Send commands to control the robot
+        # -----------------------------
+        # Publisher to send velocity commands to the robot
+        self.cmd_vel_pub = self.create_publisher(
+            Twist, 'cmd_vel', 10)
+
+        # -----------------------------
+        # Service Server: Control docking process
+        # -----------------------------
+        # Service to start/stop docking based on a request
+        self.dock_control_srv = self.create_service(
+            DockSw, 'dock_control', self.dock_control_callback,
+            callback_group=self.callback_group)
+
+        # -----------------------------
+        # Docking Parameters
+        # -----------------------------
+        # Flag to enable/disable docking procedure
+        self.is_docking = False
+
+        # Flags to control linear and orientation phases of docking
+        self.linear_dock = False
+        self.orientation_dock = False
+
+        # Target docking parameters
+        self.target_distance = 0.0  # Desired distance to docking point
+        self.target_orientation = 0.0  # Desired orientation (angle) for docking
+        self.rack_no = None  # Identifier for docking rack/position
+
+        # -----------------------------
+        # Robot State
+        # -----------------------------
+        # Current pose of the robot [x, y, yaw]
+        self.robot_pose = [0.0, 0.0, 0.0]  
+
+        # Ultrasonic sensor values
+        self.usrleft_value = None  # Left sensor reading
+        self.usrright_value = None  # Right sensor reading
+
+        # -----------------------------
+        # Control Parameters
+        # -----------------------------
+        # Distance thresholds for stopping during docking
+        self.STOP_DISTANCE = 0.03  # Desired stop distance (3cm)
+        self.DISTANCE_TOLERANCE = 0.01  # Allowable error (1cm)
+
+        # Motion constraints (speed limits)
+        self.MAX_LINEAR_SPEED = 0.4  # Maximum linear speed (m/s)
+        self.MAX_ANGULAR_SPEED = 0.4  # Maximum angular speed (rad/s)
+
+        # Emergency stopping parameters
+        self.EMERGENCY_STOP_DISTANCE = 0.03  # Safety threshold for emergency stop
+        self.has_stopped = False  # Flag to indicate if emergency stop occurred
+
+        # -----------------------------
+        # Timer: Control Loop
+        # -----------------------------
+        # Timer to run the controller loop periodically at 10Hz (0.1s)
+        self.controller_timer = self.create_timer(0.1, self.controller_loop)
+
+        # Log controller initialization completion
+        self.get_logger().info('Controller initialized')
+
+
+    def force_stop(self):
         '''
         Purpose:
         ---
-        Method for configuring system parameters such as proximity thresholds, 
-        velocity limits, and orientation tolerances.
+        Implements an emergency stop mechanism to immediately halt the robot's motion.
+        Publishes a zero-velocity command to stop linear and angular movement.
+        Resets docking-related flags to ensure the docking process is terminated safely.
 
         Input Arguments:
         ---
@@ -85,27 +144,50 @@ class AutonomousDockingSystem(Node):
 
         Example call:
         ---
-        self._configure_parameters()
-
+        self.force_stop()
         '''
-        self.PROXIMITY_THRESHOLD = 0.05  # 5cm emergency threshold
-        self.TARGET_PROXIMITY = 0.05     # 5cm target distance
-        self.PROXIMITY_MARGIN = 0.01     # 1cm tolerance
-        self.VELOCITY_LINEAR_MAX = 0.4   # Maximum linear velocity
-        self.VELOCITY_ANGULAR_MAX = 0.4  # Maximum angular velocity
-        self.ORIENTATION_THRESHOLD = 0.05 # Orientation tolerance
 
-    def _initialize_state(self):
+        # -----------------------------
+        # Publish Zero-Velocity Command
+        # -----------------------------
+        # Create a Twist message to stop the robot
+        stop_cmd = Twist()
+        stop_cmd.linear.x = 0.0  # Stop linear motion
+        stop_cmd.angular.z = 0.0  # Stop angular motion
 
+        # Publish the stop command to the robot's velocity topic
+        self.cmd_vel_pub.publish(stop_cmd)
+
+        # -----------------------------
+        # Update State Flags
+        # -----------------------------
+        # Mark that an emergency stop has occurred
+        self.has_stopped = True
+
+        # Reset docking flags to terminate any ongoing docking processes
+        self.linear_dock = False
+        self.is_docking = False
+
+        # -----------------------------
+        # Log Emergency Stop Activation
+        # -----------------------------
+        # Log a warning message for visibility
+        self.get_logger().warn('Emergency stop activated!')
+
+
+    def odometry_callback(self, msg):
         '''
         Purpose:
         ---
-        Method for initialize internal state variables such as position data,
-        proximity sensor readings, and docking status.
+        Callback function to update the robot's current pose (position and orientation)
+        based on odometry data. The position is extracted as x and y coordinates, and 
+        the orientation is converted from quaternion to yaw angle.
 
         Input Arguments:
         ---
-        None
+        `msg` : [ nav_msgs.msg.Odometry ]
+            Odometry message containing the robot's position (x, y) and orientation 
+            in quaternion format.
 
         Returns:
         ---
@@ -113,168 +195,44 @@ class AutonomousDockingSystem(Node):
 
         Example call:
         ---
-        self._initialize_state()
+        This function is automatically triggered when a new odometry message is received:
+            self.odom_sub = self.create_subscription(
+                Odometry, 'odom', self.odometry_callback, 10)
         '''
-        self.position_data = [0.0, 0.0, 0.0]  # x, y, yaw
-        self.proximity_left = None
-        self.proximity_right = None
-        self.docking_active = False
-        self.motion_halted = False
-        self.approach_enabled = False
-        self.rotation_enabled = False
-        self.target_pose = {
-            'distance': 0.0,
-            'orientation': 0.0,
-            'station_id': None
-        }
 
-    def _setup_communication(self):
-
-        '''
-        Purpose:
-        ---
-        Method for setting up ROS2 publishers, subscribers and services for
-        communication with the robot's sensors, actuators, and external
-        control interfaces. 
-
-        Input Arguments:
-        ---
-        None
-
-        Returns:
-        ---
-        None
-
-        Example call:
-        ---
-        self._setup_communication()
-        
-        '''
-        #Creating a callback handler attribute for Allowing callbacks to be run parallely without restriction
-        self._callback_handler = ReentrantCallbackGroup()
-        
         # -----------------------------
-        # Subscribers
+        # Update Robot Position (x, y)
         # -----------------------------
-        self.create_subscription(
-            Odometry, 
-            'odom', 
-            self._process_odometry, 
-            10
-        )
-        self.create_subscription(
-            Range, 
-            '/ultrasonic_rl/scan', 
-            self._process_left_proximity, 
-            10
-        )
-        self.create_subscription(
-            Range, 
-            '/ultrasonic_rr/scan', 
-            self._process_right_proximity, 
-            10
-        )
+        # Extract the x-coordinate and y-coordinate of the robot's position
+        self.robot_pose[0] = msg.pose.pose.position.x  # X position
+        self.robot_pose[1] = msg.pose.pose.position.y  # Y position
+
+        # -----------------------------
+        # Update Robot Orientation (Yaw)
+        # -----------------------------
+        # Extract the orientation quaternion from the odometry message
+        quaternion = msg.pose.pose.orientation
         
-        # -----------------------------
-        # Publisher
-        # -----------------------------
-        self.movement_publisher = self.create_publisher(
-            Twist, 
-            'cmd_vel', 
-            10
-        )
-        
-        # -----------------------------
-        # Service
-        # -----------------------------
-        self.docking_service = self.create_service(
-            DockSw, 
-            'dock_control', 
-            self._handle_docking_request,
-            callback_group=self._callback_handler
-        )
-
-    def _emergency_halt(self):
-       
-        '''
-        Purpose:
-        ---
-        Method for executing an emergency stop procedure to halt robot motion 
-        and disable further docking operations. 
-
-        Input Arguments:
-        ---
-        None
-
-        Returns:
-        ---
-        None
-
-        Example call:
-        ---
-        self._emergency_halt()
-        
-        '''
-        #Creating A Twist object for storing linear and angular velocities
-        halt_command = Twist()
-        self.movement_publisher.publish(halt_command)
-        #Variable that Tells if motion is stopped or not 
-        self.motion_halted = True
-        self.approach_enabled = False
-        #Boolean variable telling if Docking service is active or not 
-        self.docking_active = False
-        #Logging information if the Movement is halted in the form of a warning message 
-        self.get_logger().warn('Emergency halt initiated!')
-
-    def _process_odometry(self, data):
-
-        '''
-        Purpose:
-        ---
-        Method for processing odometry data updates from the robot's onboard
-        localization system. Extracts position and orientation data from the
-        odometry message and updates the internal state variables.
-
-        Input Arguments:
-        ---
-        data : [Odometry]
-            [Odometry] message containing robot pose data.
-
-        Returns:
-        ---
-        None
-
-        Example call:
-        ---
-        self._process_odometry(data)
-        
-        '''
-        #Setting position values using data parameter on function
-        self.position_data[0] = data.pose.pose.position.x
-        self.position_data[1] = data.pose.pose.position.y
-        quaternion = data.pose.pose.orientation
-        #Setting Yaw value using quaternion function
+        # Convert quaternion to Euler angles to obtain the yaw (rotation around Z-axis)
         _, _, yaw = euler_from_quaternion([
-            quaternion.x, 
-            quaternion.y, 
-            quaternion.z, 
-            quaternion.w
+            quaternion.x, quaternion.y, quaternion.z, quaternion.w
         ])
-        #Putting yaw value into postion_data
-        self.position_data[2] = yaw
+        self.robot_pose[2] = yaw  # Update robot's yaw angle in radians
 
-    def _process_left_proximity(self, data):
+
+    def ultrasonic_rl_callback(self, msg):
         '''
         Purpose:
         ---
-        Method for processing left proximity sensor data updates. Extracts
-        range data from the sensor message and updates the internal state
-        variable for left proximity.
+        Callback function to update the distance reading from the left ultrasonic sensor.
+        The distance value is extracted from the `Range` message, stored in a class 
+        variable, and logged for monitoring. It also triggers a check to validate 
+        the current distance for docking control.
 
         Input Arguments:
         ---
-        data : [Range]
-            [Range] message containing left proximity sensor data.
+        `msg` : [ sensor_msgs.msg.Range ]
+            Range message containing the distance measured by the left ultrasonic sensor.
 
         Returns:
         ---
@@ -282,27 +240,43 @@ class AutonomousDockingSystem(Node):
 
         Example call:
         ---
-        self._process_left_proximity(data)
-        
+        This function is automatically triggered when a new ultrasonic sensor reading is received:
+            self.ultrasonic_rl_sub = self.create_subscription(
+                Range, '/ultrasonic_rl/scan', self.ultrasonic_rl_callback, 10)
         '''
-        
-        self.proximity_left = data.range
-        self.get_logger().info(f'Left proximity: {self.proximity_left:.2f}m')
-        self._evaluate_proximity()
 
-    def _process_right_proximity(self, data):
+        # -----------------------------
+        # Update Left Ultrasonic Value
+        # -----------------------------
+        # Store the current distance value from the left ultrasonic sensor
+        self.usrleft_value = msg.range
 
+        # -----------------------------
+        # Log the Distance Value
+        # -----------------------------
+        # Log the distance for monitoring purposes with a precision of two decimal places
+        self.get_logger().info(f'Left ultrasonic distance: {self.usrleft_value:.2f}m')
+
+        # -----------------------------
+        # Trigger Distance Validation
+        # -----------------------------
+        # Call a function to validate the distance and take necessary docking actions
+        self.check_distance()
+
+
+    def ultrasonic_rr_callback(self, msg):
         '''
         Purpose:
         ---
-        Method for processing right proximity sensor data updates. Extracts
-        range data from the sensor message and updates the internal state
-        variable for right proximity.
+        Callback function to update the distance reading from the right ultrasonic sensor.
+        The distance value is extracted from the `Range` message, stored in a class 
+        variable, and logged for monitoring. It also triggers a check to validate 
+        the current distance for docking control.
 
         Input Arguments:
         ---
-        data : [Range]
-            [Range] message containing right proximity sensor data.
+        `msg` : [ sensor_msgs.msg.Range ]
+            Range message containing the distance measured by the right ultrasonic sensor.
 
         Returns:
         ---
@@ -310,22 +284,37 @@ class AutonomousDockingSystem(Node):
 
         Example call:
         ---
-        self._setup_communication()
-        
+        This function is automatically triggered when a new ultrasonic sensor reading is received:
+            self.ultrasonic_rr_sub = self.create_subscription(
+                Range, '/ultrasonic_rr/scan', self.ultrasonic_rr_callback, 10)
         '''
-        #Adding variable for right proximity using data parameter
-        self.proximity_right = data.range
-        #Logging information to terminal 
-        self.get_logger().info(f'Right proximity: {self.proximity_right:.2f}m')
-        self._evaluate_proximity()
 
-    def _evaluate_proximity(self):
-        """Evaluate proximity sensor data and take action if needed"""
+        # -----------------------------
+        # Update Right Ultrasonic Value
+        # -----------------------------
+        # Store the current distance value from the right ultrasonic sensor
+        self.usrright_value = msg.range
+
+        # -----------------------------
+        # Log the Distance Value
+        # -----------------------------
+        # Log the distance for monitoring purposes with a precision of two decimal places
+        self.get_logger().info(f'Right ultrasonic distance: {self.usrright_value:.2f}m')
+
+        # -----------------------------
+        # Trigger Distance Validation
+        # -----------------------------
+        # Call a function to validate the distance and take necessary docking actions
+        self.check_distance()
+
+
+    def check_distance(self):
         '''
         Purpose:
         ---
-        Method for evaluating the current proximity sensor data and taking
-        appropriate action based on the proximity threshold and target distance.
+        This function checks the average distance measured by the left and right ultrasonic 
+        sensors. Based on the distance, it determines whether to trigger an emergency stop 
+        (if the robot is too close) or a normal stop when the target distance is reached.
 
         Input Arguments:
         ---
@@ -337,89 +326,131 @@ class AutonomousDockingSystem(Node):
 
         Example call:
         ---
-        self._evaluate_proximity()
-        
+        This function is internally called from the ultrasonic sensor callbacks:
+            self.check_distance()
         '''
-        # If any of the proximity sensor data is missing, return without action 
-        if None in (self.proximity_left, self.proximity_right):
-            return
-         #<current_proximity> is the average of the left and right proximity sensor readings   
-        current_proximity = (self.proximity_left + self.proximity_right) / 2.0
-        #Logging information to terminal
-        self.get_logger().info(f'Average proximity: {current_proximity:.2f}m')
-        #If the current proximity is less than the threshold, halt the robot motion
-        if current_proximity <= self.PROXIMITY_THRESHOLD:
-            self.get_logger().warn(f'Emergency stop - proximity {current_proximity:.2f}m')
-            self._emergency_halt()
-        elif abs(current_proximity - self.TARGET_PROXIMITY) <= self.PROXIMITY_MARGIN:
-            self.get_logger().info(f'Target proximity achieved: {current_proximity:.2f}m')
-            self._emergency_halt()
 
-    def _handle_docking_request(self, request, response):
-        """Handle incoming docking service requests"""
+        # -----------------------------
+        # Validate Sensor Readings
+        # -----------------------------
+        # Check if both left and right ultrasonic values are available
+        if self.usrleft_value is not None and self.usrright_value is not None:
+            
+            # -----------------------------
+            # Calculate Average Distance
+            # -----------------------------
+            # Compute the average distance based on left and right ultrasonic values
+            avg_distance = (self.usrleft_value + self.usrright_value) / 2.0
+            
+            # Log the computed average distance
+            self.get_logger().info(f'Average distance: {avg_distance:.2f}m')
+
+            # -----------------------------
+            # Emergency Stop Condition
+            # -----------------------------
+            # If the average distance is below the emergency stop threshold, 
+            # immediately stop the robot
+            if avg_distance <= self.EMERGENCY_STOP_DISTANCE:
+                self.get_logger().warn(f'Emergency stop - distance {avg_distance:.2f}m')
+                self.force_stop()
+
+            # -----------------------------
+            # Normal Stop at Target Distance
+            # -----------------------------
+            # If the robot is within the acceptable tolerance of the target distance,
+            # stop the robot gracefully
+            elif abs(avg_distance - self.STOP_DISTANCE) <= self.DISTANCE_TOLERANCE:
+                self.get_logger().info(f'Target distance reached: {avg_distance:.2f}m')
+                self.force_stop()
+
+    def dock_control_callback(self, request, response):
         '''
         Purpose:
         ---
-        Method for handling incoming docking service requests. Parses the request
-        data to determine the docking operation to be performed and sets the internal
-        state variables accordingly.
+        Handles the service request for docking and undocking operations. Based on the input 
+        from the request, it initiates or stops docking. Parameters such as linear docking, 
+        orientation docking, target distance, and target orientation are configured.
 
         Input Arguments:
         ---
-        request : [DockSw.Request]
-            [DockSw.Request] message containing docking request data.
-        response : [DockSw.Response]
-            [DockSw.Response] message containing response data.
+        `request` :  [ DockSw.Request ]
+            Service request containing:
+            - startcmd: Bool flag to initiate docking
+            - linear_dock: Bool flag to enable linear docking
+            - orientation_dock: Bool flag to enable orientation docking
+            - distance: Target distance for docking
+            - orientation: Target orientation for docking
+            - rack_no: Identifier for the docking rack
+            - undocking: Bool flag to initiate undocking
 
+        `response` :  [ DockSw.Response ]
+            Service response containing:
+            - success: Indicates if the operation was successful
+            - message: A string message describing the status of the operation
 
         Returns:
         ---
-        response : [DockSw.Response]
-            [DockSw.Response] message containing the response to the request.
-
+        `response` :  [ DockSw.Response ]
+            The updated response object with success status and message.
 
         Example call:
         ---
-        response = self._handle_docking_request(request, response)
-        
+        This function is triggered by the service server:
+            dock_control = self.create_service(DockSw, 'dock_control', self.dock_control_callback)
         '''
-        #If the startcmd is true, then the docking service is active and the robot is moving towards the station
+
+        # -----------------------------
+        # Docking Start Command
+        # -----------------------------
         if request.startcmd:
-            self.docking_active = True
-            self.approach_enabled = request.linear_dock
-            self.rotation_enabled = request.orientation_dock
-            self.target_pose['distance'] = request.distance
-            self.target_pose['orientation'] = request.orientation
-            self.target_pose['station_id'] = request.rack_no
-            self.motion_halted = False
+            # Set docking-related parameters from the request
+            self.is_docking = True
+            self.linear_dock = request.linear_dock
+            self.orientation_dock = request.orientation_dock
+            self.target_distance = request.distance
+            self.target_orientation = request.orientation
+            self.rack_no = request.rack_no
+            self.has_stopped = False
             
-            #<response> is the response message to be sent back to the client
+            # Prepare success response for docking initiation
             response.success = True
-            response.message = f"Docking initiated for station {self.target_pose['station_id']}"
+            response.message = f"Docking initiated for rack {self.rack_no}"
             self.get_logger().info(response.message)
-        #If the undocking command is received, the robot is undocking from the station    
-        elif request.undocking:
-            self.docking_active = False
-            self._emergency_halt()
-            response.success = True
-            response.message = f"Undocking from station {self.target_pose['station_id']}"
-            self.get_logger().info(response.message)
-        # If the docking command is invalid, set the response message to indicate an error    
+
         else:
+            # Failure response if docking start command not issued
             response.success = False
-            response.message = "Invalid docking command"
+            response.message = "Docking start command not issued"
             self.get_logger().warn(response.message)
-            
+            return response
+
+        # -----------------------------
+        # Undocking Command
+        # -----------------------------
+        if request.undocking:
+            # Stop docking process and reset parameters
+            self.is_docking = False
+            self.force_stop()
+
+            # Prepare success response for undocking
+            response.success = True
+            response.message = f"Undocking initiated from rack {self.rack_no}"
+            self.get_logger().info(response.message)
+            return response
+
+        # -----------------------------
+        # Return Final Response
+        # -----------------------------
         return response
 
-    def _execute_control_loop(self):
-        """Execute the main control loop"""
+    def controller_loop(self):
         '''
         Purpose:
         ---
-        Method for executing the main control loop for the autonomous docking system.
-        Evaluates the current proximity sensor data and computes the control commands
-        for linear and angular velocity based on the target proximity and orientation.
+        Control loop for the docking operation. This function handles linear docking, 
+        orientation adjustments, and ensures safety using sensor data. The function 
+        calculates the required corrections in linear and angular velocities to achieve 
+        the target docking position.
 
         Input Arguments:
         ---
@@ -431,82 +462,87 @@ class AutonomousDockingSystem(Node):
 
         Example call:
         ---
-        self._execute_control_loop()
-        
+        This function is periodically executed by the timer created in the constructor:
+            self.controller_timer = self.create_timer(0.1, self.controller_loop)
         '''
-        #If the docking service is not active or the robot motion is halted, return without action
-        if not self.docking_active or self.motion_halted:
+
+        # -----------------------------
+        # Pre-checks before Control Loop Execution
+        # -----------------------------
+        if not self.is_docking or self.has_stopped:
+            # Exit if docking is not active or emergency stop has been triggered
             return
 
-        #If the proximity sensor data is missing, log a warning message and return without action
-        if None in (self.proximity_left, self.proximity_right):
-            self.get_logger().warn('Awaiting proximity sensor data...')
+        if self.usrleft_value is None or self.usrright_value is None:
+            # Exit and warn if sensor data is unavailable
+            self.get_logger().warn('Waiting for ultrasonic sensor readings...')
             return
 
-        #Create a Twist object for storing linear and angular velocity commands
-        #<movement_command> is the Twist message to be published to the robot's motion controller
-        movement_command = Twist()
+        # Initialize command message
+        twist = Twist()
 
-        #<current_proximity> is the average of the left and right proximity sensor readings
-        current_proximity = (self.proximity_left + self.proximity_right) / 2.0
+        # Calculate average distance from ultrasonic sensors
+        avg_distance = (self.usrleft_value + self.usrright_value) / 2.0
 
-        #If the current proximity is less than the threshold, halt the robot motion
-        if current_proximity <= self.PROXIMITY_THRESHOLD:
-            self._emergency_halt()
+        # -----------------------------
+        # Emergency Stop Check
+        # -----------------------------
+        if avg_distance <= self.EMERGENCY_STOP_DISTANCE:
+            # Trigger emergency stop if the robot is too close to the target
+            self.force_stop()
             return
-        
-        #If the approach behavior is enabled, compute the linear velocity command
-        if self.approach_enabled:
 
-            #<proximity_error> is the difference between the target proximity and the current proximity
-            proximity_error = self.TARGET_PROXIMITY - current_proximity
-            self.get_logger().info(f'Proximity error: {proximity_error:.2f}m')
+        # -----------------------------
+        # Linear Docking Control
+        # -----------------------------
+        if self.linear_dock:
+            # Calculate the error in distance
+            distance_error = self.STOP_DISTANCE - avg_distance
+            self.get_logger().info(f'Distance error: {distance_error:.2f}m')
 
-            #If the proximity error is within the tolerance, halt the robot motion
-            if abs(proximity_error) <= self.PROXIMITY_MARGIN:
-                self._emergency_halt()
-
-            #Otherwise, compute the linear velocity command based on the proximity error    
+            # Check if the robot is within the acceptable distance tolerance
+            if abs(distance_error) <= self.DISTANCE_TOLERANCE:
+                self.get_logger().info('Target distance reached. Stopping...')
+                self.force_stop()
+                return
             else:
-                #<linear_velocity> is the proportional control term for linear velocity
-                linear_velocity = 1.0 * proximity_error
-                movement_command.linear.x = max(
-                    -self.VELOCITY_LINEAR_MAX, 
-                    min(self.VELOCITY_LINEAR_MAX, linear_velocity)
-                )
-                self.get_logger().info(f'Linear velocity: {movement_command.linear.x:.2f}')
-        
-        #If the rotation behavior is enabled, compute the angular velocity command
-        if self.rotation_enabled:
-            #<orientation_error> is the difference between the target orientation and the current orientation
-            orientation_error = self.target_pose['orientation'] - self.position_data[2]
-            orientation_error = math.atan2(
-                math.sin(orientation_error), 
-                math.cos(orientation_error)
-            )
+                # Proportional control for linear speed
+                linear_speed = 1.0 * distance_error  # Proportional gain = 1.0
+                twist.linear.x = max(-self.MAX_LINEAR_SPEED, min(self.MAX_LINEAR_SPEED, linear_speed))
+                self.get_logger().info(f'Calculated Linear Speed: {twist.linear.x:.2f} m/s')
 
-            #If the orientation error is within the tolerance, disable the rotation behavior
-            if abs(orientation_error) < self.ORIENTATION_THRESHOLD:
-                self.rotation_enabled = False
+        # -----------------------------
+        # Orientation Control
+        # -----------------------------
+        if self.orientation_dock:
+            # Calculate orientation error
+            orientation_error = self.target_orientation - self.robot_pose[2]
+            orientation_error = math.atan2(math.sin(orientation_error), math.cos(orientation_error))
+            self.get_logger().info(f'Orientation error: {orientation_error:.2f} rad')
 
-            #Otherwise, compute the angular velocity command based on the orientation error    
+            # Check if the robot is within the acceptable orientation tolerance
+            if abs(orientation_error) < 0.05:  # 0.05 radians tolerance (~2.8 degrees)
+                self.get_logger().info('Target orientation reached. Stopping orientation control...')
+                self.orientation_dock = False
             else:
-                angular_velocity = 1.0 * orientation_error
-                movement_command.angular.z = max(
-                    -self.VELOCITY_ANGULAR_MAX, 
-                    min(self.VELOCITY_ANGULAR_MAX, angular_velocity)
-                )
+                # Proportional control for angular speed
+                angular_speed = 1.0 * orientation_error  # Proportional gain = 1.0
+                twist.angular.z = max(-self.MAX_ANGULAR_SPEED, min(self.MAX_ANGULAR_SPEED, angular_speed))
+                self.get_logger().info(f'Calculated Angular Speed: {twist.angular.z:.2f} rad/s')
 
-        #Publish the computed movement command to the robot's motion controller
-        if not self.motion_halted:
-            self.movement_publisher.publish(movement_command)
+        # -----------------------------
+        # Command Publication
+        # -----------------------------
+        if not self.has_stopped:
+            # Publish the calculated Twist command only if no emergency stop has been triggered
+            self.cmd_vel_pub.publish(twist)
 
 def main(args=None):
     '''
     Purpose:
     ---
-    Main method for initializing the AutonomousDockingSystem node and starting the
-    ROS 2 executor for handling communication and control tasks.
+    This is the entry point for the ROS 2 node. It initializes the ROS 2 client library, 
+    creates and spins the docking controller node, and handles shutdown procedures.
 
     Input Arguments:
     ---
@@ -520,24 +556,45 @@ def main(args=None):
     ---
     main()  # Typically called when the script is executed directly.
     '''
-    rclpy.init(args=args)
     
-    try:
-        #<node> is the AutonomousDockingSystem node object
-        node = AutonomousDockingSystem()
-        #<executor> is the MultiThreadedExecutor object for running the ROS 2 node
-        executor = MultiThreadedExecutor()
-        executor.add_node(node)
-        
-        #Run the ROS 2 node until shutdown
-        try:
-            executor.spin()
-        finally:
-            executor.shutdown()
-            node.destroy_node()
-            rclpy.shutdown()
-    except Exception as e:
-        print(f"An error occurred: {str(e)}")
+    # -----------------------------
+    # Initialize ROS 2 Client Library
+    # -----------------------------
+    rclpy.init(args=args)  # Initialize ROS 2 client library with optional arguments
 
+    try:
+        # -----------------------------
+        # Create Node Instance
+        # -----------------------------
+        node = MyRobotDockingController()  # Instantiate the docking controller node
+
+        # -----------------------------
+        # Set Up Executor and Add Node
+        # -----------------------------
+        executor = MultiThreadedExecutor()  # Executor for handling callbacks in parallel
+        executor.add_node(node)  # Add the created node to the executor
+
+        # -----------------------------
+        # Spin the Executor to Handle Callbacks
+        # -----------------------------
+        try:
+            executor.spin()  # Start spinning the executor to process incoming callbacks
+        finally:
+            # -----------------------------
+            # Shutdown Sequence
+            # -----------------------------
+            executor.shutdown()  # Shut down the executor once the node stops spinning
+            node.destroy_node()  # Destroy the node to release resources
+            rclpy.shutdown()  # Cleanly shut down the ROS 2 client library
+
+    except Exception as e:
+        # -----------------------------
+        # Error Handling
+        # -----------------------------
+        print(f"An error occurred: {str(e)}")  # Log any error encountered during execution
+
+# -----------------------------
+# Entry Point Check
+# -----------------------------
 if __name__ == '__main__':
-    main()
+    main()  # Execute the main function when the script is run directly

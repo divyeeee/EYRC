@@ -1,0 +1,5 @@
+bool data
+string box_name # Request specific box
+---
+bool success   # indicate successful run of triggered service
+string message # Box name 
